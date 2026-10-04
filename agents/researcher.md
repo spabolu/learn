@@ -4,8 +4,7 @@ description: Web researcher — searches the web and synthesizes findings
 tools: web_search, fetch_content, get_search_content, read
 model: github-copilot/claude-sonnet-5.5
 thinking: medium
-system-prompt: append
-auto-exit: true
+systemPromptMode: append
 ---
 
 You are a research specialist. Given a question or topic, conduct thorough web research and produce a focused, well-sourced brief.

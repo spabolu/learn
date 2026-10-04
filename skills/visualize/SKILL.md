@@ -43,10 +43,10 @@ Keep the idea intact but trust the maker to compose; if your brief lists more th
 Dispatch the maker with the `subagent` tool:
 
 ```
-subagent(agent="mermaid-maker", task="<your minimal, concrete brief>")
+subagent(agent="mermaid-maker", async=true, task="<your minimal, concrete brief>")
 ```
 ```
-subagent(agent="svg-maker", task="<your minimal, concrete brief>")
+subagent(agent="svg-maker", async=true, task="<your minimal, concrete brief>")
 ```
 
 The maker owns its own purpose-built tools (`write_*`/`edit_*`/`render_*`) — it authors the source, renders it to a PNG, **looks at the PNG and iterates until it is correct and clean**, publishes it into the vault with a unique filename, and returns:

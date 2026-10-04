@@ -5,8 +5,7 @@ tools: write_svg, edit_svg, render_svg, read
 subagentOnlyExtensions: ../extensions/visual-tools/tools/svg_tools.ts
 model: github-copilot/claude-sonnet-5.5
 thinking: medium
-system-prompt: append
-auto-exit: true
+systemPromptMode: append
 ---
 
 # SVG Maker
