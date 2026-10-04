@@ -26,6 +26,14 @@ git clone https://github.com/amosblomqvist/learn .pi
 
 Then open pi in that directory. (Or copy the pieces you want into your existing project config.)
 
+**Required after every clone** (`node_modules` isn't in git; without this the Mermaid maker fails with a missing-puppeteer error):
+
+```bash
+cd .pi/extensions/visual-tools
+npm install --legacy-peer-deps
+PUPPETEER_SKIP_DOWNLOAD=1 npm install puppeteer --legacy-peer-deps   # uses your installed Chrome
+```
+
 ## Requirements
 
 - [pi](https://github.com/earendil-works/pi)
