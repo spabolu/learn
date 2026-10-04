@@ -47,3 +47,7 @@ This fork is adapted to run on [`pi-subagents`](https://github.com/nicobailon/pi
 - `mermaid-maker` / `svg-maker` load their tools via `subagentOnlyExtensions` pointing at `extensions/visual-tools/tools/*.ts`.
 - In `extensions/visual-tools`: `npm install --legacy-peer-deps && PUPPETEER_SKIP_DOWNLOAD=1 npm install puppeteer --legacy-peer-deps` (uses your installed Chrome), and `brew install librsvg` for SVG rendering.
 - Obsidian: published images go to `<project>/viz`. If your vault root is a subfolder, symlink it in: `ln -s ../viz <vault>/viz`.
+
+## ADHD-friendly delivery (this fork)
+
+`skills/teach/SKILL.md` has a "Delivery" section adapting how lessons are written for a learner with ADHD (action first, one idea per node, restated progress, one next step, no preamble/closers). The probe → plan → teach flow is unchanged. Inspired by [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd).
