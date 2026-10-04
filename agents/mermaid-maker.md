@@ -5,7 +5,7 @@ tools: write_mermaid, edit_mermaid, render_mermaid, read
 subagentOnlyExtensions: ../extensions/visual-tools/tools/mermaid_tools.ts
 model: github-copilot/claude-sonnet-5.5
 thinking: medium
-systemPromptMode: append
+systemPromptMode: replace
 ---
 
 # Mermaid Maker
