@@ -37,3 +37,13 @@ Then open pi in that directory. (Or copy the pieces you want into your existing 
 You can run the system without subagents. The main session does the teaching. You just lose the researcher (truth verification) and the generated visuals.
 
 The teaching skill is written for one learner (me). Edit the skill to fit how you learn best.
+
+## Setup notes for `pi-subagents` (this fork)
+
+This fork is adapted to run on [`pi-subagents`](https://github.com/nicobailon/pi-subagents) instead of `pi-interactive-subagents`:
+
+- Install web tools for the researcher: `pi install npm:pi-web-access`. `researcher` uses `web_search`, `fetch_content`, `get_search_content` (no `safe_bash`). Run it with `async: true` so the child loads the extension.
+- Agent models are set to `github-copilot/claude-sonnet-5.5`; change them to any model in your registry.
+- `mermaid-maker` / `svg-maker` load their tools via `subagentOnlyExtensions` pointing at `extensions/visual-tools/tools/*.ts`.
+- In `extensions/visual-tools`: `npm install --legacy-peer-deps && PUPPETEER_SKIP_DOWNLOAD=1 npm install puppeteer --legacy-peer-deps` (uses your installed Chrome), and `brew install librsvg` for SVG rendering.
+- Obsidian: published images go to `<project>/viz`. If your vault root is a subfolder, symlink it in: `ln -s ../viz <vault>/viz`.
