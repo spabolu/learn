@@ -2,59 +2,63 @@
 
 [![video](assets/thumbnail.png)](https://www.youtube.com/watch?v=kzcI5F4tGiU)
 
-My AI learning system from this video: [How I Use AI to Learn Things](https://www.youtube.com/watch?v=kzcI5F4tGiU).
+A personal AI learning system for [pi](https://github.com/earendil-works/pi). It builds on the video [How I Use AI to Learn Things](https://www.youtube.com/watch?v=kzcI5F4tGiU) and on Matt Pocock's `teach` skill, and it's tuned for one learner with ADHD.
 
-This is a personal system I built for myself, shared as-is. Built as a pi configuration: the teaching philosophy encoded in a skill, a few small extensions, and agent definitions.
+## Set up one folder per skill
 
-## What's in it
-
-- `skills/teach/` — the philosophy and the process
-- `skills/visualize/` — adds a correct, minimal diagram to a lesson when an idea is clearer as a picture
-- `extensions/ask-user-question/` — the agent asks you questions through a UI popup
-- `extensions/quiz/` — graded questions with instant feedback (✓/✗, correct answer, explanation)
-- `extensions/md-log/` — link a markdown file to the session
-- `extensions/visual-tools/` — tools for visualization subagents
-- `agents/` — `researcher`, `svg-maker`, `mermaid-maker`: the subagents the system delegates to
-
-## Install
-
-This repo **is** a `.pi` directory. From your learning project's root:
+This repo is a `.pi` directory. Give each new skill its own folder:
 
 ```bash
+mkdir ~/learn-rust && cd ~/learn-rust
 git clone https://github.com/spabolu/learn .pi
+(cd .pi/extensions/learn && npm install)
+pi
 ```
 
-Then open pi in that directory. (Or copy the pieces you want into your existing project config.)
+When pi asks whether to trust the folder, choose **Trust**. Then type `/learn rust ownership`. The viewer opens in your browser, and the teacher starts by asking what you want to be able to do.
 
-**Required after every clone** (`node_modules` isn't in git; without this the Mermaid maker fails with a missing-puppeteer error):
+To continue on a later day, run `cd ~/learn-rust && pi`, then type `/learn`.
+
+To let the teacher check facts on the web, install two pi packages once:
 
 ```bash
-cd .pi/extensions/visual-tools
-PUPPETEER_SKIP_DOWNLOAD=1 npm install   # skips the Chromium download; uses your installed Chrome
+pi install npm:pi-subagents
+pi install npm:pi-web-access
 ```
 
-## Requirements
+Without them, the teacher teaches from memory and checks nothing on the web. Everything else works.
 
-- [pi](https://github.com/earendil-works/pi)
-- A subagent implementation, so the system can spawn the researcher and the visual makers. Recommended: [pi-interactive-subagents](https://github.com/amosblomqvist/pi-interactive-subagents) (tmux only). With it, everything works out of the box. Any other implementation works too, but expect to adapt the agent definitions, e.g. `agents/researcher.md` lists `safe_bash` in its tools, which is specific to that extension.
-- `ask-user-question` — use the copy bundled here. If your setup already has an `ask-user-question` extension, use **this** one in its place. Popups from different extensions serialize through a shared UI lock, which only works when it's the same implementation.
+## Commands
 
-## Notes
+| Command | What it does |
+| --- | --- |
+| `/learn <topic>` | Starts a topic, or resumes it if it exists. |
+| `/learn` | Resumes the most recent topic. |
+| `/learn list` | Lists your topics. |
+| `/learn view` | Opens the viewer. |
 
-You can run the system without subagents. The main session does the teaching. You just lose the researcher (truth verification) and the generated visuals.
+The viewer runs at `127.0.0.1:4747`. Set `LEARN_VIEWER=off` to run without it.
 
-The teaching skill is written for one learner (me). Edit the skill to fit how you learn best.
+## Change the model
 
-## Setup notes for `pi-subagents` (this fork)
+The default is Claude Sonnet 5.5 through GitHub Copilot, with medium thinking. `.pi/settings.json` sets it. To switch for one session, use `/model` and `/thinking`. To change the default, edit `.pi/settings.json`. A default that you save in the model picker goes to your global settings, and the project file overrides it.
 
-This fork is adapted to run on [`pi-subagents`](https://github.com/nicobailon/pi-subagents) instead of `pi-interactive-subagents`:
+## What's in the repo
 
-- Install web tools for the researcher: `pi install npm:pi-web-access`. `researcher` uses `web_search`, `fetch_content`, `get_search_content` (no `safe_bash`). Run it with `async: true` so the child loads the extension.
-- Agent models are set to `github-copilot/claude-sonnet-5.5`; change them to any model in your registry.
-- `mermaid-maker` / `svg-maker` load their tools via `subagentOnlyExtensions` pointing at `extensions/visual-tools/tools/*.ts`.
-- In `extensions/visual-tools`: `PUPPETEER_SKIP_DOWNLOAD=1 npm install` (uses your installed Chrome), and `brew install librsvg` for SVG rendering.
-- Obsidian: published images go to `<project>/viz`. If your vault root is a subfolder, symlink it in: `ln -s ../viz <vault>/viz`.
+- `skills/teach/SKILL.md` holds the whole teaching method:
+  - two principles: unconditional truths first, and "how could I have discovered this?"
+  - the loop: probe, plan, teach one node at a time, and review on a later day
+  - a routine for a misconception: you predict a result, check it against the real number, and then solve a new case
+  - delivery rules for ADHD, such as one idea per message and one small next step at the end of each
+- `extensions/learn/` adds `/learn` and the live web viewer. The viewer has three tabs:
+  - **Lesson** shows the conversation, with math, mermaid, and SVG rendered.
+  - **Plan** shows your mission and the plan.
+  - **Library** shows notes, reference sheets, and learning records.
 
-## ADHD-friendly delivery (this fork)
+  You can answer a question in the browser or in the terminal. The first answer counts.
+- `extensions/quiz.ts` asks graded multiple-choice questions.
+- `extensions/ask-user-question.ts` asks questions that have no right answer.
+- `agents/researcher.md` checks facts on the web before the teacher states them.
+- `settings.json` sets the default model.
 
-`skills/teach/SKILL.md` has a "Delivery" section adapting how lessons are written for a learner with ADHD (action first, one idea per node, restated progress, one next step, no preamble/closers). The probe → plan → teach flow is unchanged. Inspired by [ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd).
+Each topic gets a folder, `topics/<slug>/`, next to `.pi`. It holds plain markdown: `MISSION.md`, `PLAN.md`, `NOTES.md`, `RESOURCES.md`, `records/`, and `reference/`. The teacher reads these files at the start of each session and updates them as you go. Because they live outside `.pi`, `git -C .pi pull` updates the skill, extensions, and agent without touching your progress.
