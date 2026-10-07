@@ -9,6 +9,7 @@ import {
 	wrapTextWithAnsi,
 } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { getBridge, isIndexList, isText, raceCustom, type WebOffer } from "./learn/answer-bridge.ts";
 
 interface AskOption {
 	label: string;
@@ -200,6 +201,72 @@ function buildResult(question: string, context: string | undefined, mode: AskUse
 	};
 }
 
+// The browser sees the question and the options, and can answer like the terminal:
+// pick options, or write the "Other" text.
+function askOffer(question: string, context: string | undefined, options: AskOption[], mode: AskUserQuestionMode): WebOffer {
+	return {
+		kind: "ask",
+		payload: { question, context, mode, otherLabel: getOtherLabel(options), options: options.map((o, i) => ({ index: i + 1, label: o.label, description: o.description })) },
+		validate: (v: any) => {
+			if (mode === "text") return isText(v);
+			const hasOther = typeof v?.other === "string" && v.other.trim().length > 0;
+			if (hasOther && isText(v, "other")) return isText(v, "other");
+			if (mode === "single-select") return hasOther ? null : isIndexList(v, options.length, false);
+			const hasIdx = Array.isArray(v?.indices) && v.indices.length > 0;
+			if (!hasIdx && !hasOther) return "choose an option or write an answer";
+			return hasIdx ? isIndexList(v, options.length, true) : null;
+		},
+	};
+}
+
+function webAnswers(options: AskOption[], v: any): AskAnswer[] {
+	const out: AskAnswer[] = (Array.isArray(v.indices) ? (v.indices as number[]) : [])
+		.sort((a, b) => a - b)
+		.map((i) => ({ type: "option" as const, label: options[i - 1].label, value: options[i - 1].value, index: i }));
+	if (typeof v.other === "string" && v.other.trim()) out.push({ type: "other", label: v.other.trim(), value: v.other.trim() });
+	return out;
+}
+
+// Free-text questions. Uses the plain pi editor unless the live viewer can also answer.
+async function askText(ctx: any, question: string, context: string | undefined): Promise<string | undefined> {
+	const title = context ? `${question}\n\n${context}` : question;
+	if (!getBridge()) return ctx.ui.editor(title);
+	const r = await raceCustom<string | null>(
+		(f) => ctx.ui.custom(f),
+		askOffer(question, context, [], "text"),
+		(tui: any, theme: any, _kb: any, done: (r: string | null) => void) => {
+			const editor = new Editor(tui, createEditorTheme(theme));
+			editor.focused = true;
+			editor.onSubmit = (value) => done(value);
+			return {
+				render(width: number): string[] {
+					const lines: string[] = [truncateToWidth(theme.fg("accent", "─".repeat(width)), width)];
+					for (const raw of title.split("\n")) {
+						for (const l of wrapTextWithAnsi(raw, Math.max(1, width - 1))) lines.push(truncateToWidth(` ${theme.fg("text", l)}`, width));
+					}
+					lines.push("");
+					for (const l of editor.render(width)) lines.push(l);
+					lines.push(truncateToWidth(theme.fg("dim", " Enter submit • Ctrl+J newline • Esc cancel"), width));
+					return lines;
+				},
+				invalidate() {
+					editor.invalidate();
+				},
+				handleInput(data: string) {
+					if (matchesKey(data, Key.escape)) {
+						done(null);
+						return;
+					}
+					editor.handleInput(data);
+					tui.requestRender();
+				},
+			};
+		},
+		(v: any) => String(v.text),
+	);
+	return r === null ? undefined : r;
+}
+
 async function askSingleChoice(
 	ctx: any,
 	question: string,
@@ -212,7 +279,10 @@ async function askSingleChoice(
 		{ id: "other", label: otherLabel, value: "__other__", isOther: true },
 	];
 
-	return ctx.ui.custom<AskAnswer | null>((tui: any, theme: any, _kb: any, done: (result: AskAnswer | null) => void) => {
+	return raceCustom<AskAnswer | null>(
+		(f) => ctx.ui.custom(f),
+		askOffer(question, context, options, "single-select"),
+		(tui: any, theme: any, _kb: any, done: (result: AskAnswer | null) => void) => {
 		let optionIndex = 0;
 		let editMode = false;
 		let cachedLines: string[] | undefined;
@@ -330,7 +400,9 @@ async function askSingleChoice(
 			},
 			handleInput,
 		};
-	});
+		},
+		(v: any) => webAnswers(options, v)[0],
+	);
 }
 
 async function askMultiChoice(
@@ -352,7 +424,10 @@ async function askMultiChoice(
 		submitItem,
 	];
 
-	return ctx.ui.custom<AskAnswer[] | null>((tui: any, theme: any, _kb: any, done: (result: AskAnswer[] | null) => void) => {
+	return raceCustom<AskAnswer[] | null>(
+		(f) => ctx.ui.custom(f),
+		askOffer(question, context, options, "multi-select"),
+		(tui: any, theme: any, _kb: any, done: (result: AskAnswer[] | null) => void) => {
 		let optionIndex = 0;
 		let editMode = false;
 		let cachedLines: string[] | undefined;
@@ -535,7 +610,9 @@ async function askMultiChoice(
 			},
 			handleInput,
 		};
-	});
+		},
+		(v: any) => webAnswers(options, v),
+	);
 }
 
 // Shared UI mutex. ctx.ui.custom()/editor can only handle one active call at
@@ -599,8 +676,7 @@ export default function askUserQuestion(pi: ExtensionAPI) {
 
 			return withUILock(async () => {
 				if (mode === "text") {
-					const editorTitle = context ? `${params.question}\n\n${context}` : params.question;
-					const answer = await ctx.ui.editor(editorTitle);
+					const answer = await askText(ctx, params.question, context);
 					if (answer === undefined) {
 						return cancelledResult(params.question, mode, context);
 					}

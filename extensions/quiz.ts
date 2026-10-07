@@ -8,6 +8,7 @@ import {
 	truncateToWidth,
 	wrapTextWithAnsi,
 } from "@mariozechner/pi-tui";
+import { isIndexList, optionalNote, raceCustom, type WebOffer } from "./learn/answer-bridge.ts";
 import { Type } from "@sinclair/typebox";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -82,11 +83,11 @@ interface QuizResultDetails {
 }
 
 const OptionSchema = Type.Object({
-	label: Type.String({ description: "Display label for the answer option." }),
+	label: Type.String({ description: "Display label for the answer option. One line; inline `code` only, never a fenced code block. Put any code block in the question's context instead." }),
 	value: Type.Optional(
 		Type.String({ description: "Optional machine-readable value returned for the option. Defaults to the label." }),
 	),
-	description: Type.Optional(Type.String({ description: "Optional extra detail shown below the option." })),
+	description: Type.Optional(Type.String({ description: "Rarely needed, and shown BEFORE the learner answers. Never explain, justify or paraphrase the option here: that gives the answer away. Reasoning goes in `explanation`." })),
 });
 
 const QuizParams = Type.Object({
@@ -120,13 +121,22 @@ const QuizParams = Type.Object({
 	),
 });
 
+// An option is one line in the popup, so a fenced block shows up as a bare
+// "```python". Turn fenced code into inline code on one line.
+function flattenCode(label: string): string {
+	return label
+		.replace(/```[a-zA-Z0-9_+-]*\n?([\s\S]*?)```/g, (_m, code: string) => "`" + code.trim().split("\n").map((l) => l.trim()).filter(Boolean).join("; ") + "`")
+		.replace(/\s*\n\s*/g, " ")
+		.trim();
+}
+
 function normalizeOptions(
 	options: Array<{ label: string; value?: string; description?: string }> | undefined,
 ): QuizOption[] {
 	const seen = new Set<string>();
 	return (options || [])
 		.map((option) => ({
-			label: option.label.trim(),
+			label: flattenCode(option.label),
 			value: option.value?.trim() || option.label.trim(),
 			description: option.description?.trim() || undefined,
 		}))
@@ -433,8 +443,10 @@ async function askSingleChoice(
 	}));
 	const dontKnowNav = allOptions.length; // nav index of the "I don't know" row
 
-	return ctx.ui.custom<QuizResponse | null>(
-		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void) => {
+	return raceCustom<QuizResponse | null>(
+		(f) => ctx.ui.custom(f),
+		quizOffer(question, context, options, false),
+		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void, claim: () => boolean) => {
 			let optionIndex = 0;
 			let phase: "select" | "feedback" = "select";
 			let focus: "options" | "note" = "options";
@@ -507,6 +519,12 @@ async function askSingleChoice(
 					refresh();
 					return;
 				}
+				// A digit jumps to that option; Enter still confirms, so a stray key never answers.
+				if (/^[1-9]$/.test(data) && Number(data) <= allOptions.length) {
+					optionIndex = Number(data) - 1;
+					refresh();
+					return;
+				}
 				if (matchesKey(data, Key.enter)) {
 					if (optionIndex === dontKnowNav) {
 						dontKnow = true;
@@ -516,6 +534,8 @@ async function askSingleChoice(
 						chosen = { label: selected.label, value: selected.value, index: selected.index };
 						dontKnow = false;
 					}
+					// The answer is committed here, before the feedback view: withdraw the browser copy.
+					if (!claim()) return;
 					phase = "feedback";
 					refresh();
 					return;
@@ -595,6 +615,7 @@ async function askSingleChoice(
 				handleInput,
 			};
 		},
+		quizFromWeb(options),
 	);
 }
 
@@ -621,8 +642,10 @@ async function askMultiChoice(
 	const submitItem: DisplayOption = { id: "submit", label: "Submit", value: "__submit__", index: -1, isSubmit: true };
 	const allItems: DisplayOption[] = [...choiceItems, dontKnowItem, submitItem];
 
-	return ctx.ui.custom<QuizResponse | null>(
-		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void) => {
+	return raceCustom<QuizResponse | null>(
+		(f) => ctx.ui.custom(f),
+		quizOffer(question, context, options, true),
+		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void, claim: () => boolean) => {
 			let optionIndex = 0;
 			let phase: "select" | "feedback" = "select";
 			let focus: "options" | "note" = "options";
@@ -681,6 +704,7 @@ async function askMultiChoice(
 
 			function submit() {
 				if (selected.size === 0) return;
+				if (!claim()) return;
 				phase = "feedback";
 				refresh();
 			}
@@ -726,6 +750,14 @@ async function askMultiChoice(
 					return;
 				}
 
+				if (/^[1-9]$/.test(data)) {
+					const target = allItems.findIndex((it) => !it.isSubmit && it.index === Number(data));
+					if (target >= 0) {
+						optionIndex = target;
+						toggleOption(allItems[target]);
+						return;
+					}
+				}
 				const current = allItems[optionIndex];
 				if (matchesKey(data, Key.space)) {
 					if (current.isSubmit) return;
@@ -839,7 +871,29 @@ async function askMultiChoice(
 				handleInput,
 			};
 		},
+		quizFromWeb(options),
 	);
+}
+
+// The browser sees the question and options in display order: never which is correct.
+function quizOffer(question: string, context: string | undefined, options: QuizOption[], multi: boolean): WebOffer {
+	return {
+		kind: "quiz",
+		payload: { question, context, multi, options: options.map((o, i) => ({ index: i + 1, label: o.label, description: o.description })) },
+		validate: (v: any) => (v?.dontKnow === true ? optionalNote(v) : (isIndexList(v, options.length, multi) ?? optionalNote(v))),
+	};
+}
+
+function quizFromWeb(options: QuizOption[]) {
+	return (v: any): QuizResponse => {
+		const note = typeof v.note === "string" && v.note.trim() ? v.note.trim() : undefined;
+		if (v.dontKnow === true) return { dontKnow: true, note, answers: [] };
+		return {
+			dontKnow: false,
+			note,
+			answers: (v.indices as number[]).sort((a, b) => a - b).map((i) => ({ label: options[i - 1].label, value: options[i - 1].value, index: i })),
+		};
+	};
 }
 
 function sortAnswers(answers: OptionAnswer[]): OptionAnswer[] {
@@ -919,7 +973,7 @@ export default function quiz(pi: ExtensionAPI) {
 			}
 
 			// Emit the true (post-shuffle) display order immediately, before the UI
-			// blocks on the user's answer. Listeners such as md-log rely on this to
+			// blocks on the user's answer. Listeners such as the viewer rely on this to
 			// show the question in the SAME order the user actually sees it, instead
 			// of the pre-shuffle order the agent originally wrote in its tool call.
 			// Deliberately omits correctIndices/explanation — this fires before the
