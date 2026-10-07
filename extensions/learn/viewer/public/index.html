@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>learn</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/vendor/katex.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header id="bar">
+	<div class="bar-main">
+		<span id="topic" class="topic">learn</span>
+		<nav id="tabs">
+			<button data-tab="lesson" class="active">Lesson</button>
+			<button data-tab="plan">Plan</button>
+			<button data-tab="library">Library</button>
+		</nav>
+	</div>
+</header>
+<main>
+	<section id="lesson" class="tab active"><div id="feed"></div><div id="turn" aria-live="polite"></div><div id="empty" class="empty">Waiting for the lesson to start. Answer questions in the terminal; they appear here.</div></section>
+	<section id="plan" class="tab"></section>
+	<section id="library" class="tab"></section>
+</main>
+<button id="jump" class="jump" hidden>New below</button>
+<div id="conn" class="conn" hidden>Disconnected. Reconnecting…</div>
+<script src="/vendor/marked.js"></script>
+<script src="/vendor/katex.js"></script>
+<script src="/vendor/purify.js"></script>
+<script src="/vendor/mermaid.js"></script>
+<script src="/render.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

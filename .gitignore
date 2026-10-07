@@ -16,3 +16,6 @@ __pycache__/
 # Runtime state
 .memory/
 *.log
+
+# Learner data (per-topic state, records, notes)
+topics/
